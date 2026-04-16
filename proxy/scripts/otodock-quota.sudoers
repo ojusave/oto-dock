@@ -1,0 +1,19 @@
+# OtoDock — storage quotas sudoers snippet (bare-metal, hard tier).
+#
+# Lets the unprivileged proxy user run the oto-quota helper (which drives
+# `xfs_quota` to assign project IDs / set limits / report usage on an EXISTING
+# project-quota XFS mount — it never creates or mounts anything) without a
+# password. The helper is self-contained and re-validates every argument
+# (numeric project IDs in the reserved range, realpath'd paths, XFS-prjquota
+# mount required), so this single fixed-path NOPASSWD entry is the whole
+# privileged surface.
+#
+# Install (adjust the user + path to your installation):
+#   sudo install -m 0440 scripts/otodock-quota.sudoers /etc/sudoers.d/otodock-quota
+#   sudo visudo -cf /etc/sudoers.d/otodock-quota          # validate before trusting it
+#
+# (Or merge this line into the existing /etc/sudoers.d/otodock-scripts allowlist.)
+# Not needed when the proxy runs as root, e.g. a privileged Docker container —
+# it then calls the helper directly.
+
+otodock ALL=(root) NOPASSWD: /opt/otodock/proxy/scripts/oto-quota

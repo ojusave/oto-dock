@@ -1,0 +1,211 @@
+#!/usr/bin/env python3
+"""oto-quota — privileged helper for OtoDock storage quotas (XFS project quotas).
+
+Driven by ``services/infra/storage_quota.py``. Runs as root — directly in a privileged
+Docker proxy container, or via ``sudo -n`` against the
+``/etc/sudoers.d/otodock-quota`` allowlist on bare-metal. **Self-contained:
+imports nothing from the proxy app** (it runs with elevated privilege, so its
+attack surface is only this file + its argument validation).
+
+This helper only drives ``xfs_quota`` on an EXISTING project-quota XFS mount — it
+does **not** create, format, or mount anything. Operators provide a
+project-quota-capable data volume; the hard quota tier auto-activates on it,
+or stays soft (measure + warn) otherwise.
+
+Subcommands
+-----------
+  check    <mountpoint>
+        Verify xfs_quota is present and <mountpoint> is an XFS mount with
+        project quota active. Exit 0 if quotas can be enforced there, else 1.
+        Used by the boot preflight to prove the sudo path resolves.
+
+  assign   <dir> <project_id>
+        Stamp <dir> with <project_id> + the inherit flag, recursively (so files
+        created later inherit the ID). xfs_quota ``project -s -p``.
+
+  setlimit <mountpoint> <project_id> <hard_bytes> <hard_inodes>
+        Set the project's hard block + inode limits. ``0`` = unlimited.
+
+  report   <mountpoint> <project_id>
+        Print ``<used_bytes> <used_inodes>`` for the project (O(1), no walk).
+
+Security: this is a sudo entry point, so every argument is re-validated here —
+project IDs must be integers in the reserved range, paths are realpath'd, and
+quota mutation requires the target to be an XFS mount with project quota active.
+"""
+
+import os
+import shutil
+import subprocess
+import sys
+
+# Mirror services/infra/storage_quota.py's reserved range — refuse IDs outside it so a
+# crafted sudo call can't touch project 0 (the default/root project) or system
+# project IDs.
+PROJECT_ID_BASE = 0x40000000
+PROJECT_ID_MAX = 0xFFFFFFFF - 1
+
+
+def die(msg: str, code: int = 1):
+    sys.stderr.write(f"oto-quota: {msg}\n")
+    sys.exit(code)
+
+
+def run(argv: list[str], check: bool = True) -> subprocess.CompletedProcess:
+    cp = subprocess.run(argv, capture_output=True, text=True)
+    if check and cp.returncode != 0:
+        die(f"command failed ({' '.join(argv)}): {(cp.stderr or cp.stdout).strip()}")
+    return cp
+
+
+def valid_pid(raw: str) -> int:
+    try:
+        pid = int(raw)
+    except (TypeError, ValueError):
+        die(f"project id {raw!r} is not an integer")
+    if not (PROJECT_ID_BASE <= pid <= PROJECT_ID_MAX):
+        die(f"project id {pid} is outside the allowed range "
+            f"[{PROJECT_ID_BASE}, {PROJECT_ID_MAX}]")
+    return pid
+
+
+def valid_count(raw: str, what: str) -> int:
+    try:
+        n = int(raw)
+    except (TypeError, ValueError):
+        die(f"{what} {raw!r} is not an integer")
+    if n < 0:
+        die(f"{what} must be >= 0")
+    return n
+
+
+def real_dir(raw: str) -> str:
+    p = os.path.realpath(raw)
+    if not os.path.isdir(p):
+        die(f"path {raw!r} is not an existing directory")
+    return p
+
+
+def mount_info(path: str) -> tuple[str, str, str] | None:
+    """``(mountpoint, fstype, options)`` of the mount backing ``path``."""
+    real = os.path.realpath(path)
+    best = None
+    try:
+        with open("/proc/mounts") as f:
+            for line in f:
+                parts = line.split()
+                if len(parts) < 4:
+                    continue
+                mp = parts[1].encode().decode("unicode_escape")
+                norm = mp.rstrip("/") or "/"
+                if real == norm or real.startswith(norm.rstrip("/") + "/") or norm == "/":
+                    if best is None or len(norm) > len(best[0]):
+                        best = (norm, parts[2], parts[3])
+    except OSError:
+        return None
+    return best
+
+
+def require_xfs_prjquota(path: str) -> str:
+    info = mount_info(path)
+    if info is None:
+        die(f"could not resolve the mount backing {path!r}")
+    mp, fstype, opts = info
+    if fstype != "xfs":
+        die(f"{path!r} is on a {fstype!r} filesystem, not XFS — project quotas "
+            f"cannot be enforced there")
+    if not ("prjquota" in opts or "pquota" in opts):
+        die(f"XFS project quota is not active on {mp!r} (mount with -o prjquota)")
+    return mp
+
+
+def need_tool(name: str):
+    if shutil.which(name) is None:
+        die(f"required tool {name!r} not found on PATH")
+
+
+# --- subcommands -----------------------------------------------------------
+
+def cmd_check(args: list[str]):
+    if len(args) != 1:
+        die("usage: oto-quota check <mountpoint>")
+    need_tool("xfs_quota")
+    require_xfs_prjquota(real_dir(args[0]))
+    print("ok")
+
+
+def cmd_assign(args: list[str]):
+    if len(args) != 2:
+        die("usage: oto-quota assign <dir> <project_id>")
+    need_tool("xfs_quota")
+    target = real_dir(args[0])
+    pid = valid_pid(args[1])
+    mp = require_xfs_prjquota(target)
+    # -s sets up the project: stamps the inherit flag on dirs + recursively
+    # assigns the id to existing files. -p <path> <id> defines it inline so we
+    # never touch /etc/projects / /etc/projid.
+    run(["xfs_quota", "-x", "-c", f"project -s -p {target} {pid}", mp])
+    print("ok")
+
+
+def cmd_setlimit(args: list[str]):
+    if len(args) != 4:
+        die("usage: oto-quota setlimit <mountpoint> <project_id> <hard_bytes> <hard_inodes>")
+    need_tool("xfs_quota")
+    mp = require_xfs_prjquota(real_dir(args[0]))
+    pid = valid_pid(args[1])
+    hard_bytes = valid_count(args[2], "hard_bytes")
+    hard_inodes = valid_count(args[3], "hard_inodes")
+    # xfs_quota's limit parser reads a bare number as BYTES (suffix k/m/g/t =
+    # ×1024^n). 0 = unlimited. We set hard limits only — the proxy's monitor
+    # owns the 90/95% warnings, so we don't need XFS soft-limit grace timers.
+    run(["xfs_quota", "-x", "-c",
+         f"limit -p bhard={hard_bytes} ihard={hard_inodes} {pid}", mp])
+    print("ok")
+
+
+def _project_used(mp: str, pid: int, flag: str) -> int:
+    """Column-2 (Used) of the project's row in ``report -p -N <flag>``."""
+    cp = run(["xfs_quota", "-x", "-c", f"report -p -N {flag}", mp])
+    for line in cp.stdout.splitlines():
+        cols = line.split()
+        if len(cols) < 2:
+            continue
+        ident = cols[0].lstrip("#")
+        if ident.isdigit() and int(ident) == pid:
+            try:
+                return int(cols[1])
+            except ValueError:
+                return 0
+    return 0  # project has no usage row yet → 0
+
+
+def cmd_report(args: list[str]):
+    if len(args) != 2:
+        die("usage: oto-quota report <mountpoint> <project_id>")
+    need_tool("xfs_quota")
+    mp = require_xfs_prjquota(real_dir(args[0]))
+    pid = valid_pid(args[1])
+    # `report -b` block usage is in KiB (xfs_quota default); `-i` inodes is a
+    # raw count. Convert blocks to bytes.
+    used_kib = _project_used(mp, pid, "-b")
+    used_inodes = _project_used(mp, pid, "-i")
+    print(f"{used_kib * 1024} {used_inodes}")
+
+
+_COMMANDS = {
+    "check": cmd_check,
+    "assign": cmd_assign,
+    "setlimit": cmd_setlimit,
+    "report": cmd_report,
+}
+
+
+def main():
+    if len(sys.argv) < 2 or sys.argv[1] not in _COMMANDS:
+        die(f"usage: oto-quota {{{'|'.join(_COMMANDS)}}} <args...>", code=2)
+    _COMMANDS[sys.argv[1]](sys.argv[2:])
+
+
+if __name__ == "__main__":
+    main()
