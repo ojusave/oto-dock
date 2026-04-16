@@ -1,0 +1,36 @@
+# Template unit for a bare-metal (host-process) install. `scripts/dev-setup.sh
+# --service` generates and enables this automatically with your checkout's
+# paths and user — edit by hand only if you manage the unit yourself.
+[Unit]
+Description=OtoDock — multi-agent AI orchestration platform
+# PostgreSQL runs in Docker (docker-compose.t1.yml) → wait for the daemon.
+# If you run a native PostgreSQL instead, add postgresql.service here.
+After=network.target docker.service
+# Storage quotas (hard tier): if you put the data dir on its own quota-capable
+# XFS volume/mount, uncomment so the proxy starts only once it's mounted (the
+# quota tier just degrades to soft otherwise).
+#RequiresMountsFor=/var/lib/otodock/agents
+
+[Service]
+Type=simple
+# --- Edit these for your installation ---
+User=otodock
+Group=otodock
+WorkingDirectory=/opt/otodock/proxy
+# EnvironmentFile exports every config.env key into the service's process
+# environment. The proxy also parses config.env itself; process env wins.
+EnvironmentFile=/opt/otodock/config.env
+ExecStart=/opt/otodock/proxy/venv/bin/python app.py
+# -----------------------------------------
+Restart=on-failure
+RestartSec=10
+
+Environment="PATH=/usr/local/bin:/usr/bin:/bin"
+Environment="NODE_PATH=/usr/lib/node_modules"
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=otodock-proxy
+
+[Install]
+WantedBy=multi-user.target
