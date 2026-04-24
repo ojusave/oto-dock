@@ -1,0 +1,30 @@
+{
+  "name": "mcps-mcp",
+  "label": "MCPs Manager",
+  "description": "Lets agents browse the community MCP catalog, see what is installed/enabled for the current agent, request the admin to install or enable an MCP, and (for admin sessions) install or enable MCPs directly. Permission-aware: viewers see zero tools.",
+  "version": "1.0.0",
+  "category": "core",
+
+  "server": {
+    "runtime": "python",
+    "transport": "stdio",
+    "command": "venv/bin/python",
+    "args": ["server.py"]
+  },
+
+  "credentials": {
+    "type": "none"
+  },
+
+  "config": [],
+
+  "env": {},
+  "agent_env": {},
+
+  "exclude_from": [],
+
+  "skills": [],
+
+  "patched": false,
+  "patch_note": null
+}

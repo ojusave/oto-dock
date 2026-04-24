@@ -1,0 +1,30 @@
+{
+  "name": "agent-config-mcp",
+  "label": "Agent Self-Config",
+  "description": "Lets an agent inspect and modify its own settings — identity (display name, description, color), default model, default execution layer, default scope, and per-agent memory toggles — and mark post-install setup complete. Permission-aware: viewers see zero tools.",
+  "version": "1.1.0",
+  "category": "core",
+
+  "server": {
+    "runtime": "python",
+    "transport": "stdio",
+    "command": "venv/bin/python",
+    "args": ["server.py"]
+  },
+
+  "credentials": {
+    "type": "none"
+  },
+
+  "config": [],
+
+  "env": {},
+  "agent_env": {},
+
+  "exclude_from": [],
+
+  "skills": [],
+
+  "patched": false,
+  "patch_note": null
+}
