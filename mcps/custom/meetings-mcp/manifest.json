@@ -1,0 +1,43 @@
+{
+  "name": "meetings-mcp",
+  "label": "Meeting Rooms",
+  "description": "Multi-agent meeting collaboration",
+  "version": "1.0.0",
+  "category": "core",
+  "server": {
+    "runtime": "python",
+    "transport": "stdio",
+    "command": "venv/bin/python",
+    "args": ["server.py"]
+  },
+  "credentials": {
+    "type": "none"
+  },
+  "config": [
+    {
+      "key": "MAX_PARALLEL_SPAWNS",
+      "label": "Max parallel meeting participants per user",
+      "input_type": "number",
+      "default": "4",
+      "user_overridable": false
+    }
+  ],
+  "env": {},
+  "agent_env": {
+    "MEETINGS_MCP_AGENT": "${agent_name}",
+    "PROXY_TASK_OWNER": "${session.task_owner}",
+    "PROXY_TASK_USERNAME": "${session.task_username}",
+    "PROXY_TASK_SCOPE": "${session.task_scope}"
+  },
+  "exclude_from": ["phone", "terminal"],
+  "skills": [
+    {
+      "id": "meetings",
+      "file": "skills/meetings.md",
+      "description": "When and how to use multi-agent meetings for collaborative problem-solving",
+      "default_exclude_from": ["phone", "terminal"]
+    }
+  ],
+  "patched": false,
+  "patch_note": null
+}
