@@ -1,0 +1,81 @@
+{
+  "name": "image-search-mcp",
+  "label": "Image Search",
+  "description": "Search the web for images (Unsplash, Pexels, Google), reverse-image search via Google Lens, and save images to the agent's workspace",
+  "version": "1.2.0",
+  "category": "custom",
+
+  "server": {
+    "runtime": "python",
+    "transport": "stdio",
+    "command": "venv/bin/python",
+    "args": ["server.py"]
+  },
+
+  "credentials": {
+    "type": "none"
+  },
+
+  "instances": {
+    "delivery": "env",
+    "fields": [
+      {"key": "UNSPLASH_ACCESS_KEY", "label": "Unsplash Access Key (free)",
+       "input_type": "password", "secret": true,
+       "help": "Free signup at https://unsplash.com/developers (50 req/hr dev tier, 5000/hr after auto-promotion)."},
+      {"key": "PEXELS_API_KEY", "label": "Pexels API Key (free)",
+       "input_type": "password", "secret": true,
+       "help": "Free signup at https://www.pexels.com/api/ (200 req/hr, 20k/month)."},
+      {"key": "SERPAPI_KEY", "label": "SerpAPI Key (paid, optional — unlocks Google Images AND Lens reverse search)",
+       "input_type": "password", "secret": true,
+       "help": "ONE key serves both: full-web Google Images for find_images (prefer_provider='google'/'all') AND Google Lens for search_by_image. Google's own Custom Search API can no longer enable whole-web search for new engines (deprecated by Google late 2024 / early 2025), so we route through SerpAPI's google_images engine instead. Sign up at https://serpapi.com/manage-api-key — 100 free searches/month, then ~$0.01 per search ($50/mo for 5000 on the Developer plan)."}
+    ],
+    "max_instances": 0
+  },
+
+  "config": [],
+  "env": {},
+  "agent_env": {},
+  "path_env": {
+    "IMAGE_WORKSPACE": {"role": "workspace"}
+  },
+
+  "assignment_mode": "explicit",
+  "exclude_from": ["phone"],
+
+  "tool_arg_paths": {
+    "search_by_image": {
+      "image_path": { "mode": "read" }
+    },
+    "save_image": {
+      "dest_path": { "mode": "write" }
+    }
+  },
+
+  "costs": {
+    "currency": "USD",
+    "provider": "image-search",
+    "rules": [
+      {"tool": "find_images", "match": {"prefer_provider": "google"}, "amount": 0.01},
+      {"tool": "find_images", "match": {"prefer_provider": "all"}, "amount": 0.01},
+      {"tool": "search_by_image", "amount": 0.01}
+    ]
+  },
+
+  "agent_context": [
+    {
+      "template": "## Image search & display\n\nYou can search the web for images and show them to the user inline. When the user asks about a place, object, person, event, or anything visual, default to showing images, not just describing.\n\n**Forward search** — `find_images(query, count=3)` returns image URL candidates. Pick the best 1-4, then call `display_images(images=[...])` from display-mcp to render them in chat.\n\n**Reverse search** — when the user uploads a photo and asks what it is, where to buy it, where it appears online, etc., call `search_by_image(image_path, mode=\"products\" | \"visual_matches\" | \"exact_matches\" | \"all\")`. Then show the matches via `display_images(images=[...])` with `link_url` set to each product/source URL so the user can click through to the retailer page.\n\n**Save** — only call `save_image(url, dest_path)` when the user explicitly asks to save an image.\n\n**Provider preference** (`find_images`) — default `prefer_provider=\"all\"` uses every configured provider. Use `\"stock\"` (free Unsplash + Pexels only) for scenic / object / lifestyle queries to save the user money. Use `\"google\"` (real Google Image Search results via SerpAPI, ~$0.01/call) when you need real-world specifics (people, news, specific products, brands).\n\n**Communication style** — feel free to use emojis sparingly when they help scan-readability (✅ done, ⚠️ warning, 🔧 fix, 💡 idea). Don't over-do it."
+    }
+  ],
+
+  "skills": [
+    {
+      "id": "image-search-usage",
+      "file": "skills/image-search.md",
+      "description": "How and when to call find_images, search_by_image, and save_image",
+      "default_exclude_from": ["phone"]
+    }
+  ],
+
+  "patched": false,
+  "patch_note": null
+}

@@ -1,0 +1,67 @@
+{
+  "name": "image-gen-mcp",
+  "label": "Image Generation",
+  "description": "AI image generation (Nano Banana Pro, GPT Image 1.5)",
+  "version": "1.2.0",
+  "category": "custom",
+  "server": {
+    "runtime": "python",
+    "transport": "stdio",
+    "command": "venv/bin/python",
+    "args": ["server.py"]
+  },
+  "credentials": {
+    "type": "none"
+  },
+  "instances": {
+    "delivery": "env",
+    "fields": [
+      {"key": "GOOGLE_AI_API_KEY", "label": "Google AI API Key", "input_type": "password", "secret": true},
+      {"key": "OPENAI_IMAGE_API_KEY", "label": "OpenAI Image API Key", "input_type": "password", "secret": true}
+    ],
+    "max_instances": 0
+  },
+  "config": [],
+  "env": {},
+  "agent_env": {},
+  "path_env": {
+    "IMAGE_SAVE_DIR": {"role": "workspace"}
+  },
+  "assignment_mode": "explicit",
+  "exclude_from": ["task"],
+
+  "tool_arg_paths": {
+    "generate_image": {
+      "save_path": { "mode": "write" }
+    },
+    "edit_image_ai": {
+      "image_path": { "mode": "read" },
+      "mask_path":  { "mode": "read" },
+      "save_path":  { "mode": "write" }
+    }
+  },
+  "costs": {
+    "currency": "USD",
+    "provider": "image-gen",
+    "rules": [
+      {"tool": "generate_image", "match": {"model": "nano-banana"}, "amount": 0.134, "multiply_by": "num_images"},
+      {"tool": "generate_image", "match": {"model": "gpt-image", "quality": "high", "aspect_ratio": ["16:9", "9:16", "4:3", "3:4", "3:2", "2:3", "21:9"]}, "amount": 0.25, "multiply_by": "num_images"},
+      {"tool": "generate_image", "match": {"model": "gpt-image", "quality": "high"}, "amount": 0.167, "multiply_by": "num_images"},
+      {"tool": "generate_image", "match": {"model": "gpt-image", "aspect_ratio": ["16:9", "9:16", "4:3", "3:4", "3:2", "2:3", "21:9"]}, "amount": 0.063, "multiply_by": "num_images"},
+      {"tool": "generate_image", "match": {"model": "gpt-image"}, "amount": 0.042, "multiply_by": "num_images"},
+      {"tool": "edit_image_ai", "match": {"model": "gpt-image", "quality": "high"}, "amount": 0.167},
+      {"tool": "edit_image_ai", "match": {"model": "gpt-image"}, "amount": 0.042},
+      {"tool": "edit_image_ai", "amount": 0.134}
+    ]
+  },
+  "skills": [
+    {
+      "id": "image-gen-usage",
+      "file": "skills/image-gen.md",
+      "description": "Image generation tool descriptions and model selection guidance",
+      "default_exclude_from": ["task"]
+    }
+  ],
+  "patched": false,
+  "patch_note": null
+}

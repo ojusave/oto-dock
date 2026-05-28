@@ -1,0 +1,53 @@
+{
+  "name": "display-mcp",
+  "server_name": "display",
+  "label": "Display",
+  "description": "Display images, files, audio, video, and URLs in chat",
+  "version": "1.12.0",
+  "category": "core",
+
+  "server": {
+    "runtime": "python",
+    "transport": "stdio",
+    "command": "venv/bin/python",
+    "args": ["display_server.py"]
+  },
+
+  "credentials": {
+    "type": "none"
+  },
+
+  "config": [],
+
+  "env": {},
+  "agent_env": {},
+
+  "exclude_from": ["phone", "terminal"],
+
+  "tool_arg_paths": {
+    "display_images": {
+      "images[*].source": { "mode": "read" }
+    },
+    "send_file": {
+      "path": { "mode": "read" }
+    },
+    "display_video": {
+      "source": { "mode": "read" }
+    },
+    "display_audio": {
+      "source": { "mode": "read" }
+    }
+  },
+
+  "skills": [
+    {
+      "id": "display-tools",
+      "file": "skills/display-tools.md",
+      "description": "Display MCP tool descriptions and usage instructions",
+      "default_exclude_from": ["phone"]
+    }
+  ],
+
+  "patched": false,
+  "patch_note": null
+}
