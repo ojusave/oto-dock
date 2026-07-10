@@ -1,0 +1,88 @@
+name: release-images
+
+# Build the platform images and push them to GHCR. Self-hosted installs on the
+# Docker-Compose topology PULL these tags (docker-compose.yml pins
+# ghcr.io/otodock/otodock-proxy + otodock-file-tools at OTODOCK_VERSION);
+# contributors build from source via docker-compose.build.yml instead.
+#
+# The version tag is read from VERSIONS.md (OTODOCK_VERSION) — the single
+# source of truth — so bumping it there is what drives a new release tag.
+# Triggers: manual dispatch, or pushing a release tag (v*).
+#
+# FIRST-RUN, ONE-TIME (per package): after the first successful push, open
+# Packages → <package> → Package settings and (a) set visibility to Public and
+# (b) link it to this repository. GHCR packages default to private + unlinked.
+# Auth uses the built-in GITHUB_TOKEN (packages: write) — no PAT required.
+
+on:
+  workflow_dispatch: {}
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    # Images publish only from the official repo (never mirrors or forks).
+    if: github.repository == 'OtoDock/oto-dock'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: otodock-proxy
+            context: .
+            dockerfile: proxy/Dockerfile
+          - image: otodock-file-tools
+            context: mcps/custom/file-tools-mcp
+            dockerfile: mcps/custom/file-tools-mcp/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve pinned versions from VERSIONS.md
+        id: meta
+        run: |
+          version=$(bash scripts/versions.sh OTODOCK_VERSION)
+          python_image=$(bash scripts/versions.sh PYTHON_IMAGE)
+          node_image=$(bash scripts/versions.sh NODE_IMAGE)
+          for v in version python_image node_image; do
+            if [ -z "${!v}" ]; then
+              echo "::error::${v} missing from VERSIONS.md"; exit 1
+            fi
+          done
+          {
+            echo "version=$version"
+            echo "python_image=$python_image"
+            echo "node_image=$node_image"
+          } >> "$GITHUB_OUTPUT"
+          echo "::notice::building ${{ matrix.image }} -> ghcr.io/otodock/${{ matrix.image }}:$version"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          # amd64 only for launch; add linux/arm64 here (buildx multi-arch) later.
+          platforms: linux/amd64
+          push: true
+          # file-tools has no version ARGs — the extra build-args are inert there.
+          build-args: |
+            PYTHON_IMAGE=${{ steps.meta.outputs.python_image }}
+            NODE_IMAGE=${{ steps.meta.outputs.node_image }}
+          tags: |
+            ghcr.io/otodock/${{ matrix.image }}:${{ steps.meta.outputs.version }}
+            ghcr.io/otodock/${{ matrix.image }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
