@@ -1,0 +1,71 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "oto-audio"
+version = "0.1.0a0"  # alpha until OSS launch
+description = "Provider-agnostic STT / TTS / VAD / turn-classifier package for OtoDock (chat audio + telephony)."
+requires-python = ">=3.13"
+# License: inherits the OtoDock repository license. Omitted here rather than
+# asserting a value that could conflict with the repo root.
+
+# Pins kept consistent with phone/requirements.txt. Majors are pinned
+# where a private/unstable upstream API is used:
+#   - cartesia: 3.x exposes a public context/push API with a dict output_format —
+#     the old private `cartesia._types.OutputFormat` import is gone; hold <4.
+#   - silero-vad-lite: exact-pin — runtime VAD semantics, not a public API.
+#     Drift between proxy/phone could change detection.
+# CORE — cloud STT/TTS providers. Used by BOTH the proxy (cloud chat audio:
+# /v1/audio/*) and the phone server. Kept deliberately lean so the proxy image
+# does NOT carry the on-box model stack (ONNX/transformers, ~250 MB) it never
+# imports — that's the phone-only ``localmodels`` extra below.
+dependencies = [
+    "deepgram-sdk>=3.11,<4.0",  # Deepgram streaming + prerecorded STT
+    "cartesia>=3.2,<4.0",       # Cartesia Sonic TTS (3.x context/push API; dict output_format)
+    "websockets>=13",           # cartesia 3.x TTS uses websockets.asyncio.client. We declare it
+                                #   directly rather than via cartesia[websockets] (whose <16 cap
+                                #   conflicts with the websockets the proxy/phone already run; the
+                                #   connect() kwargs cartesia uses are accepted by 16.x).
+    "numpy>=2.2,<3.0",          # Smart Turn audio buffers + mel features
+    "httpx[http2]>=0.28,<1.0",  # Groq turn-classifier client
+    "pydantic>=2.0",            # capability descriptors
+]
+
+[project.optional-dependencies]
+# Local-model engines — Silero VAD + Smart Turn run on-box (the phone pipeline).
+# The proxy's chat-audio path is cloud-only and does NOT need these, so the proxy
+# installs the lean core and the phone installs ``oto-audio[localmodels]``.
+localmodels = [
+    "onnxruntime>=1.23,<2.0",   # Silero VAD + Smart Turn ONNX inference
+    "transformers>=4.57,<5.0",  # Smart Turn mel features (WhisperFeatureExtractor; its config is vendored at models/whisper_feature_extractor/ — offline, HF Hub only as fallback)
+    "silero-vad-lite==0.2.1",   # exact-pin: runtime-semantics VAD dep
+]
+# Heavy local PROVIDER engines ship as importable stubs in the core install;
+# install the extra to enable the real implementation. Footprint noted in
+# CONTRIBUTING_PROVIDERS.md per provider.
+canary = ["nemo-toolkit>=2.0"]       # NVIDIA Canary 1B v2 local STT (large)
+chatterbox = ["torch>=2.0"]          # Resemble Chatterbox Multilingual local TTS (large)
+dev = ["pytest>=8.0", "pytest-asyncio>=0.23"]
+
+# The pyproject lives INSIDE the package dir, so the `audio` namespace maps to
+# "." (this dir) and `import audio` resolves to oto-dock/audio/ after install —
+# NOT to the contents (providers/, streaming/) as top-level packages.
+[tool.setuptools]
+package-dir = { audio = "." }
+packages = [
+    "audio",
+    "audio.providers",
+    "audio.providers.stt",
+    "audio.providers.tts",
+    "audio.providers.vad",
+    "audio.providers.turn",
+    "audio.streaming",
+]
+
+[tool.setuptools.package-data]
+audio = ["models/*.onnx", "models/whisper_feature_extractor/*.json"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["providers", "streaming"]
