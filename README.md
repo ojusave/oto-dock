@@ -104,9 +104,8 @@ box.
 ### Render
 
 Deploy this fork via Blueprint (official image + managed Postgres + disk). See
-[`RENDER.md`](RENDER.md): **no upstream code changes**; Render cannot match
-compose sandbox / Docker socket requirements, so verify with a real deploy
-rather than assuming `/health` will pass.
+[`RENDER.md`](RENDER.md). **No upstream code changes.** Verified Live deploy:
+[`/health` on otodock.onrender.com](https://otodock.onrender.com/health) (Docker MCPs still unavailable without a host Docker socket).
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://dashboard.render.com/select-repo?type=blueprint)
 
