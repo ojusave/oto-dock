@@ -101,6 +101,15 @@ box.
 
 ## Quick start
 
+### Render
+
+Deploy this fork via Blueprint (official image + managed Postgres + disk). See
+[`RENDER.md`](RENDER.md): **no upstream code changes**; Render cannot match
+compose sandbox / Docker socket requirements, so verify with a real deploy
+rather than assuming `/health` will pass.
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://dashboard.render.com/select-repo?type=blueprint)
+
 ### Docker (recommended)
 
 The compose file is all you need — images are pulled from GHCR:

@@ -1,0 +1,70 @@
+# yaml-language-server: $schema=https://render.com/schema/render.yaml.json
+#
+# OtoDock on Render — Blueprint (docs-only fork packaging; upstream image)
+# Upstream: https://github.com/OtoDock/oto-dock
+# Image: ghcr.io/otodock/otodock-proxy:1.1.0
+#
+# Pattern: image-wrapper. No application source changes in this fork.
+# See RENDER.md for proven host limits (seccomp / Docker socket / disks).
+
+previews:
+  generation: off
+
+projects:
+  - name: oto-dock
+    environments:
+      - name: production
+        services:
+          - type: web
+            name: otodock
+            runtime: image
+            plan: standard
+            region: oregon
+            image:
+              url: ghcr.io/otodock/otodock-proxy:1.1.0
+            healthCheckPath: /health
+            autoDeployTrigger: off
+            disk:
+              name: otodock-data
+              mountPath: /var/otodock
+              sizeGB: 10
+            envVars:
+              - key: PORT
+                value: "8400"
+              - key: PROXY_PORT
+                value: "8400"
+              - key: PROXY_HOST
+                value: "0.0.0.0"
+              - key: PLATFORM_DATA_DIR
+                value: "/var/otodock"
+              - key: PLATFORM_CONFIG_DIR
+                value: "/var/otodock"
+              - key: RUNNING_IN_DOCKER
+                value: "false"
+              - key: PROXY_API_KEY
+                generateValue: true
+              - key: JWT_SECRET
+                generateValue: true
+              - key: PHONE_API_SECRET
+                generateValue: true
+              - key: OTODOCK_INSTALL_ID
+                generateValue: true
+              - key: DATABASE_URL
+                fromDatabase:
+                  name: otodock-db
+                  property: connectionString
+              - key: DASHBOARD_PUBLIC_URL
+                sync: false
+              - key: TZ
+                value: "UTC"
+              - key: VAPID_EMAIL
+                value: "admin@localhost"
+
+        databases:
+          - name: otodock-db
+            plan: basic-1gb
+            region: oregon
+            databaseName: otodock
+            user: otodock
+            postgresMajorVersion: "16"
+            ipAllowList: []
